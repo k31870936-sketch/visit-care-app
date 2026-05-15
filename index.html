@@ -814,8 +814,8 @@ function registerPatient() {
 }
 
 // AI 브리핑 생성
-async function generateBrief() {
-  const name  = document.getElementById('b-name').value  || '';
+function generateBrief() {
+  const name  = document.getElementById('b-name').value  || '환자';
   const age   = document.getElementById('b-age').value   || '';
   const dx    = document.getElementById('b-dx').value    || '';
   const vital = document.getElementById('b-vital').value || '';
@@ -823,66 +823,98 @@ async function generateBrief() {
 
   const out = document.getElementById('brief-output');
   const btn = document.getElementById('gen-btn');
-  btn.disabled = true;
 
+  // 위험도 계산
+  let riskScore = 0;
+  const dxLower = dx.toLowerCase();
+  if (vital.includes('16') || vital.includes('17') || vital.includes('18')) riskScore += 3;
+  else if (vital.includes('14') || vital.includes('15')) riskScore += 2;
+  if (vital.includes('18') || vital.includes('19') || vital.includes('20')) riskScore += 2;
+  if (dxLower.includes('신부전') || dxLower.includes('심부전')) riskScore += 2;
+  if (dxLower.includes('치매') || dxLower.includes('알츠하이머')) riskScore += 1;
+  if (dxLower.includes('낙상')) riskScore += 2;
+  if (dxLower.includes('암')) riskScore += 2;
+  if (note.includes('독거') || note.includes('혼자')) riskScore += 1;
+  if (note.includes('복약') || note.includes('불규칙')) riskScore += 1;
+
+  let riskLevel, riskLabel, riskReason, riskColor;
+  if (riskScore >= 5) {
+    riskLevel = 'high'; riskLabel = '🔴 고위험';
+    riskReason = '복수의 만성질환과 불안정한 바이탈 수치가 확인됩니다. 즉각적인 임상 판단이 필요합니다.';
+    riskColor = 'var(--red-border)';
+  } else if (riskScore >= 3) {
+    riskLevel = 'mid'; riskLabel = '🟡 중위험';
+    riskReason = '일부 지표에서 주의 수준의 이상이 관찰됩니다. 면밀한 모니터링이 필요합니다.';
+    riskColor = 'var(--amber-border)';
+  } else {
+    riskLevel = 'low'; riskLabel = '🟢 저위험';
+    riskReason = '전반적으로 안정적인 상태입니다. 정기적인 관리를 유지하세요.';
+    riskColor = 'var(--green-mid)';
+  }
+
+  // 핵심 확인 항목 생성
+  const checks = [];
+  if (dxLower.includes('고혈압') || vital.includes('혈압')) checks.push('혈압 측정 및 지난 방문 대비 변화 추이 확인');
+  if (dxLower.includes('당뇨') || vital.includes('혈당')) checks.push('공복혈당 및 식후혈당 확인, 인슐린 복용 여부 점검');
+  if (dxLower.includes('신부전')) checks.push('부종 여부 및 소변량 변화 확인');
+  if (dxLower.includes('치매') || dxLower.includes('알츠하이머')) checks.push('인지기능 변화 및 일상생활 수행능력(ADL) 확인');
+  if (dxLower.includes('낙상')) checks.push('낙상 위험 환경 점검 및 보행 안정성 평가');
+  if (dxLower.includes('copd') || dxLower.includes('폐')) checks.push('호흡곤란 여부 및 산소포화도 측정');
+  if (dxLower.includes('심부전')) checks.push('체중 변화 및 하지 부종 확인');
+  if (dxLower.includes('우울') || dxLower.includes('불안')) checks.push('정서 상태 및 수면 패턴 확인');
+  if (note.includes('복약') || note.includes('불규칙')) checks.push('복약 순응도 확인 및 남은 약 수량 점검');
+  if (checks.length < 3) {
+    checks.push('전반적인 활력징후 측정 (혈압, 맥박, 체온, 산소포화도)');
+    checks.push('현재 복용 중인 약물 부작용 여부 확인');
+    checks.push('일상생활 불편사항 및 새로운 증상 청취');
+  }
+  const checkList = checks.slice(0, 3);
+
+  // 주의사항 생성
+  const cautions = [];
+  if (note.includes('독거') || note.includes('혼자')) cautions.push('독거 환자로 방문 시 응급상황 대비 보호자 연락처 확인 필수');
+  if (dxLower.includes('낙상')) cautions.push('낙상 위험이 높으므로 이동 시 반드시 지지 및 보조 제공');
+  if (dxLower.includes('치매') || dxLower.includes('알츠하이머')) cautions.push('인지기능 저하로 의사소통 시 천천히 명확하게 설명 필요');
+  if (vital.includes('16') || vital.includes('17')) cautions.push('혈압이 위험 수준으로 방문 중 급격한 혈압 변동 주의');
+  if (dxLower.includes('신부전')) cautions.push('신부전 환자로 약물 처방 시 신독성 약물 투여에 주의');
+  if (cautions.length < 2) {
+    cautions.push('방문 전 전화로 환자 상태 사전 확인 권장');
+    cautions.push('응급 상황 발생 시 즉시 119 연계 가능하도록 준비');
+  }
+  const cautionList = cautions.slice(0, 2);
+
+  // 의사에게 한 마디
+  let message = '';
+  if (riskLevel === 'high') message = '오늘 방문에서 바이탈 이상 수치가 지속될 경우 입원 또는 응급 이송 여부를 즉시 판단하시기 바랍니다.';
+  else if (riskLevel === 'mid') message = '복약 순응도와 생활습관 개선 여부를 중심으로 면담하시고, 다음 방문 일정을 명확히 안내해 주세요.';
+  else message = '안정적인 상태가 유지되고 있습니다. 긍정적인 피드백으로 환자의 자기관리 의지를 강화해 주세요.';
+
+  // 출력
   out.innerHTML = `
     <div class="brief-card">
-      <div class="loading-wrap">
-        <div class="spinner"></div>
-        <span>AI가 방문 브리핑을 생성하고 있습니다...</span>
+      <div class="brief-title">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        ${name} — 방문 브리핑
+      </div>
+      <div class="brief-text" style="border-left-color:${riskColor}">
+<b>1. 위험도 판정</b>
+${riskLabel}
+${riskReason}
+
+<b>2. 핵심 확인 항목</b>
+1) ${checkList[0]}
+2) ${checkList[1]}
+3) ${checkList[2]}
+
+<b>3. 방문 시 주의사항</b>
+1) ${cautionList[0]}
+2) ${cautionList[1]}
+
+<b>4. 의사에게 전하는 한 마디</b>
+${message}
       </div>
     </div>
   `;
-
-  const prompt = `당신은 방문진료 의사를 보조하는 AI 시스템입니다.
-아래 환자 정보를 바탕으로 의사가 가정 방문 전에 읽을 간결한 브리핑을 작성해주세요.
-
-환자 정보:
-- 이름: ${name}
-- 나이/성별: ${age}
-- 진단명: ${dx}
-- 최근 바이탈: ${vital}
-- 특이사항: ${note}
-
-브리핑 형식 (아래 순서대로 작성):
-1. 위험도 판정: 고/중/저위험 + 한 줄 근거
-2. 이번 방문 핵심 확인 항목 3가지 (번호 목록)
-3. 방문 시 주의사항 2가지 (번호 목록)
-4. 의사에게 전하는 한 마디
-
-의학적으로 정확하고, 실제 방문진료 의사가 바로 활용할 수 있도록 간결하게 작성하세요.`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-
-    const data = await res.json();
-    const text = data.content?.find(b => b.type === 'text')?.text || '응답을 받지 못했습니다.';
-
-    out.innerHTML = `
-      <div class="brief-card">
-        <div class="brief-title">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          ${name} — 방문 브리핑
-        </div>
-        <div class="brief-text">${text}</div>
-      </div>
-    `;
-  } catch(e) {
-    out.innerHTML = `
-      <div class="brief-card">
-        <div class="brief-text" style="color:var(--red-text)">오류가 발생했습니다: ${e.message}</div>
-      </div>
-    `;
-  }
-  btn.disabled = false;
 }
 </script>
 </body>
